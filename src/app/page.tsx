@@ -1,65 +1,125 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useCallback, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { Sparkles } from 'lucide-react';
+import Header from '@/components/layout/header';
+import StatsCards from '@/components/dashboard/stats-cards';
+import TareasHoy from '@/components/dashboard/tareas-hoy';
+import TareasPendientes from '@/components/dashboard/tareas-pendientes';
+import VistaSemanal from '@/components/dashboard/vista-semanal';
+import RecordatoriosProximos from '@/components/dashboard/recordatorios-proximos';
+import Celebracion from '@/components/lucas/celebracion';
+import LucasAvatar from '@/components/lucas/avatar';
+
+function getGreeting(hour: number): string {
+  if (hour < 6) return '¡Buenas noches!';
+  if (hour < 12) return '¡Buenos días!';
+  if (hour < 19) return '¡Buenas tardes!';
+  return '¡Buenas noches!';
+}
+
+function getLucasMood(hour: number): 'happy' | 'thinking' | 'sleeping' | 'excited' {
+  if (hour < 6 || hour >= 23) return 'sleeping';
+  if (hour >= 6 && hour < 9) return 'thinking';
+  if (hour >= 9 && hour < 18) return 'happy';
+  return 'happy';
+}
+
+export default function DashboardPage() {
+  const [showCelebracion, setShowCelebracion] = useState(false);
+  const today = new Date();
+  const hour = today.getHours();
+
+  const greeting = useMemo(() => getGreeting(hour), [hour]);
+  const mood = useMemo(() => getLucasMood(hour), [hour]);
+
+  const handleComplete = useCallback(() => {
+    setShowCelebracion(true);
+  }, []);
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen">
+      <Header title="Inicio" />
+
+      <motion.div
+        className="p-4 lg:p-6 max-w-6xl mx-auto space-y-6"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        {/* Welcome section */}
+        <motion.div
+          variants={itemVariants}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-card to-card border border-border p-6"
+        >
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-32 h-32 bg-fuchsia-500/5 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2" />
+
+          <div className="relative flex items-center gap-5">
+            <LucasAvatar size="lg" animate mood={mood} />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <h1 className="text-2xl lg:text-3xl font-bold gradient-text">
+                  {greeting}
+                </h1>
+                <Sparkles className="w-5 h-5 text-yellow-400" />
+              </div>
+              <p className="text-lg text-foreground/90">
+                {format(today, "EEEE", { locale: es }).charAt(0).toUpperCase() +
+                  format(today, "EEEE", { locale: es }).slice(1)},{' '}
+                {format(today, "d 'de' MMMM", { locale: es })}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {mood === 'sleeping'
+                  ? 'Lucas está dormidito... pero siempre listo para ayudarte'
+                  : mood === 'thinking'
+                  ? 'Lucas se está despertando... ¡vamos a por el día!'
+                  : '¿En qué te puedo ayudar hoy?'}
+              </p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Stats */}
+        <motion.div variants={itemVariants}>
+          <StatsCards />
+        </motion.div>
+
+        {/* Main grid */}
+        <div className="grid lg:grid-cols-2 gap-6">
+          <motion.div variants={itemVariants} className="space-y-6">
+            <TareasHoy onComplete={handleComplete} />
+            <RecordatoriosProximos />
+          </motion.div>
+          <motion.div variants={itemVariants} className="space-y-6">
+            <VistaSemanal />
+            <TareasPendientes onComplete={handleComplete} />
+          </motion.div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </motion.div>
+
+      <Celebracion
+        show={showCelebracion}
+        onComplete={() => setShowCelebracion(false)}
+      />
     </div>
   );
 }
