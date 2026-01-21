@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChat } from '@/hooks/use-chat';
 import MensajeComponent from './mensaje';
 import ChatInput from './chat-input';
@@ -29,7 +28,7 @@ export default function ChatInterface({ conversacionId }: ChatInterfaceProps) {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)]">
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+      <div className="flex-1 overflow-y-auto p-4" ref={scrollRef}>
         {mensajes.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
             <motion.div
@@ -136,7 +135,7 @@ export default function ChatInterface({ conversacionId }: ChatInterfaceProps) {
             <p className="text-sm text-destructive">{error}</p>
           </motion.div>
         )}
-      </ScrollArea>
+      </div>
 
       <ChatInput onSend={handleSend} disabled={isLoading} />
     </div>

@@ -1,7 +1,4 @@
-import { db } from '@/lib/db';
-import { crearTarea, buscarTareas, completarTarea } from '@/hooks/use-tareas';
-import { crearRecordatorio } from '@/hooks/use-recordatorios';
-import { supabase, recordatorioToSupabase } from '@/lib/supabase';
+import { supabase, tareaToSupabase, recordatorioToSupabase } from '@/lib/supabase';
 import { format, startOfDay, endOfDay, addDays, parseISO, isValid, setHours, setMinutes, getDay, nextDay, addWeeks } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { Tarea, Recordatorio, Prioridad } from '@/types';
@@ -67,7 +64,7 @@ export const AI_FUNCTIONS = [
         },
         fechaHora: {
           type: 'string',
-          description: 'Fecha y hora en formato ISO (YYYY-MM-DDTHH:mm:ss)',
+          description: 'Fecha y hora del recordatorio. Usa formato "día a las HH:MM" (ej: "martes a las 9", "jueves a las 14:30") o ISO (YYYY-MM-DDTHH:mm:ss)',
         },
       },
       required: ['titulo', 'fechaHora'],
@@ -122,32 +119,29 @@ export const AI_FUNCTIONS = [
 ];
 
 function extractTime(str: string): { hours: number; minutes: number } | null {
-  // Patrones de hora: "9", "9:00", "9:30", "09:00", "21:00", "9am", "9pm", "9 am", "9 de la mañana", "9 de la tarde"
   const patterns = [
-    /(\d{1,2}):(\d{2})/,                           // 9:00, 09:30, 21:00
-    /(\d{1,2})\s*(am|a\.m\.|a\.m)/i,               // 9am, 9 am, 9 a.m.
-    /(\d{1,2})\s*(pm|p\.m\.|p\.m)/i,               // 9pm, 9 pm, 9 p.m.
-    /(\d{1,2})\s*de la mañana/i,                   // 9 de la mañana
-    /(\d{1,2})\s*de la tarde/i,                    // 5 de la tarde
-    /(\d{1,2})\s*de la noche/i,                    // 9 de la noche
-    /a las (\d{1,2})(?::(\d{2}))?/i,               // a las 9, a las 9:30
-    /(\d{1,2})\s*(?:hrs?|horas?)/i,                // 9h, 9hrs, 9 horas
+    /(\d{1,2}):(\d{2})/,
+    /(\d{1,2})\s*(am|a\.m\.|a\.m)/i,
+    /(\d{1,2})\s*(pm|p\.m\.|p\.m)/i,
+    /(\d{1,2})\s*de la mañana/i,
+    /(\d{1,2})\s*de la tarde/i,
+    /(\d{1,2})\s*de la noche/i,
+    /a las (\d{1,2})(?::(\d{2}))?/i,
+    /(\d{1,2})\s*(?:hrs?|horas?)/i,
   ];
 
   for (const pattern of patterns) {
     const match = str.match(pattern);
     if (match) {
       let hours = parseInt(match[1], 10);
-      let minutes = match[2] ? parseInt(match[2], 10) : 0;
+      const minutes = match[2] && !isNaN(parseInt(match[2], 10)) ? parseInt(match[2], 10) : 0;
 
-      // Ajustar PM
       if (/pm|p\.m|de la tarde/i.test(str) && hours < 12) {
         hours += 12;
       }
       if (/de la noche/i.test(str) && hours < 12) {
         hours += 12;
       }
-      // Ajustar AM (12am = 0)
       if (/am|a\.m|de la mañana/i.test(str) && hours === 12) {
         hours = 0;
       }
@@ -161,12 +155,13 @@ function extractTime(str: string): { hours: number; minutes: number } | null {
   return null;
 }
 
-function getNextDayOfWeek(dayIndex: 0 | 1 | 2 | 3 | 4 | 5 | 6, includeToday = false): Date {
+function getNextDayOfWeek(dayIndex: 0 | 1 | 2 | 3 | 4 | 5 | 6): Date {
   const today = new Date();
   const currentDay = getDay(today) as 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
-  if (includeToday && currentDay === dayIndex) {
-    return today;
+  if (currentDay === dayIndex) {
+    // Si es el mismo día, devolver la próxima semana
+    return addDays(today, 7);
   }
 
   return nextDay(today, dayIndex);
@@ -175,8 +170,6 @@ function getNextDayOfWeek(dayIndex: 0 | 1 | 2 | 3 | 4 | 5 | 6, includeToday = fa
 function parseFlexibleDate(dateStr: string): Date | null {
   const today = new Date();
   const lowerStr = dateStr.toLowerCase().trim();
-
-  // Extraer hora si existe
   const timeInfo = extractTime(lowerStr);
 
   let resultDate: Date | null = null;
@@ -193,10 +186,9 @@ function parseFlexibleDate(dateStr: string): Date | null {
   // 2. Días de la semana
   if (!resultDate) {
     for (const [dia, index] of Object.entries(DIAS_SEMANA)) {
-      // Patrones: "martes", "el martes", "este martes", "próximo martes", "proximo martes"
       const diaPattern = new RegExp(`(?:el\\s+|este\\s+|pr[oó]ximo\\s+)?${dia}`, 'i');
       if (diaPattern.test(lowerStr)) {
-        resultDate = getNextDayOfWeek(index);
+        resultDate = getNextDayOfWeek(index as 0 | 1 | 2 | 3 | 4 | 5 | 6);
         break;
       }
     }
@@ -256,11 +248,195 @@ function parseFlexibleDate(dateStr: string): Date | null {
   return resultDate;
 }
 
+// Funciones para crear en Supabase directamente (servidor)
+async function crearTareaEnSupabase(data: {
+  titulo: string;
+  descripcion?: string;
+  prioridad: Prioridad;
+  categoria: string;
+  fechaLimite?: Date;
+}): Promise<number | null> {
+  if (!supabase) {
+    console.error('Supabase not configured');
+    return null;
+  }
+
+  const now = new Date();
+  const tarea: Tarea = {
+    titulo: data.titulo,
+    descripcion: data.descripcion,
+    prioridad: data.prioridad,
+    categoria: data.categoria,
+    fechaLimite: data.fechaLimite,
+    completada: false,
+    orden: Date.now(),
+    imagenes: [],
+    creadaEn: now,
+    actualizadaEn: now,
+  };
+
+  const supabaseData = tareaToSupabase(tarea);
+  // Remove id since it's auto-generated
+  const { id: _, ...dataWithoutId } = supabaseData;
+
+  const { data: result, error } = await supabase
+    .from('tareas')
+    .insert(dataWithoutId)
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error('Error creating tarea in Supabase:', error);
+    return null;
+  }
+
+  return result?.id || null;
+}
+
+async function crearRecordatorioEnSupabase(data: {
+  titulo: string;
+  descripcion?: string;
+  fechaHora: Date;
+  notificarAntes: number[];
+}): Promise<number | null> {
+  if (!supabase) {
+    console.error('Supabase not configured');
+    return null;
+  }
+
+  const now = new Date();
+  const recordatorio: Recordatorio = {
+    titulo: data.titulo,
+    descripcion: data.descripcion,
+    fechaHora: data.fechaHora,
+    notificarAntes: data.notificarAntes,
+    completado: false,
+    notificacionesEnviadas: [],
+    exportadoACalendar: false,
+    creadoEn: now,
+    actualizadoEn: now,
+  };
+
+  const supabaseData = recordatorioToSupabase(recordatorio);
+  // Remove id since it's auto-generated
+  const { id: _, ...dataWithoutId } = supabaseData;
+
+  const { data: result, error } = await supabase
+    .from('recordatorios')
+    .insert(dataWithoutId)
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error('Error creating recordatorio in Supabase:', error);
+    return null;
+  }
+
+  return result?.id || null;
+}
+
+async function listarTareasDeSupabase(filtro: string, categoria?: string) {
+  if (!supabase) return [];
+
+  let query = supabase.from('tareas').select('*').is('parent_id', null);
+
+  if (categoria) {
+    query = query.eq('categoria', categoria);
+  }
+
+  const today = startOfDay(new Date());
+  const todayEnd = endOfDay(new Date());
+
+  switch (filtro) {
+    case 'hoy':
+      query = query
+        .gte('fecha_limite', today.toISOString())
+        .lte('fecha_limite', todayEnd.toISOString());
+      break;
+    case 'pendientes':
+      query = query.eq('completada', false);
+      break;
+    case 'completadas':
+      query = query.eq('completada', true);
+      break;
+  }
+
+  const { data, error } = await query.order('creada_en', { ascending: false }).limit(10);
+
+  if (error) {
+    console.error('Error listing tareas:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+async function buscarYCompletarTarea(busqueda: string) {
+  if (!supabase) return null;
+
+  const { data: tareas, error } = await supabase
+    .from('tareas')
+    .select('*')
+    .eq('completada', false)
+    .is('parent_id', null)
+    .ilike('titulo', `%${busqueda}%`)
+    .limit(5);
+
+  if (error || !tareas || tareas.length === 0) {
+    return { found: false, tareas: [] };
+  }
+
+  if (tareas.length === 1) {
+    // Completar la tarea
+    await supabase
+      .from('tareas')
+      .update({ completada: true, completada_en: new Date().toISOString() })
+      .eq('id', tareas[0].id);
+
+    return { found: true, completed: true, tarea: tareas[0] };
+  }
+
+  return { found: true, completed: false, tareas };
+}
+
+async function listarRecordatoriosDeSupabase(filtro: string) {
+  if (!supabase) return [];
+
+  let query = supabase.from('recordatorios').select('*').eq('completado', false);
+
+  const today = startOfDay(new Date());
+  const todayEnd = endOfDay(new Date());
+  const nextWeek = addDays(new Date(), 7);
+
+  switch (filtro) {
+    case 'hoy':
+      query = query
+        .gte('fecha_hora', today.toISOString())
+        .lte('fecha_hora', todayEnd.toISOString());
+      break;
+    case 'proximos':
+      query = query
+        .gte('fecha_hora', new Date().toISOString())
+        .lte('fecha_hora', nextWeek.toISOString());
+      break;
+  }
+
+  const { data, error } = await query.order('fecha_hora', { ascending: true }).limit(10);
+
+  if (error) {
+    console.error('Error listing recordatorios:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
 export async function executeFunction(
   name: string,
   args: Record<string, unknown>
 ): Promise<string> {
   console.log('[AI Function] Executing:', name, 'with args:', JSON.stringify(args));
+
   try {
     switch (name) {
       case 'crear_tarea': {
@@ -268,13 +444,17 @@ export async function executeFunction(
           ? parseFlexibleDate(args.fechaLimite as string)
           : undefined;
 
-        const id = await crearTarea({
+        const id = await crearTareaEnSupabase({
           titulo: args.titulo as string,
           descripcion: args.descripcion as string | undefined,
           prioridad: (args.prioridad as Prioridad) || 'media',
           categoria: (args.categoria as string) || 'Personal',
           fechaLimite: fechaLimite || undefined,
         });
+
+        if (!id) {
+          return 'Hubo un error al crear la tarea. ¿Podrías intentarlo de nuevo?';
+        }
 
         const fechaStr = fechaLimite
           ? ` para ${format(fechaLimite, "EEEE d 'de' MMMM", { locale: es })}`
@@ -289,25 +469,18 @@ export async function executeFunction(
         console.log('[crear_recordatorio] Parsed fechaHora:', fechaHora);
 
         if (!fechaHora) {
-          console.log('[crear_recordatorio] Failed to parse date');
-          return `No pude entender la fecha "${args.fechaHora}". ¿Podrías especificarla de otra manera? (ej: "martes a las 9" o "2024-01-25T09:00")`;
+          return `No pude entender la fecha "${args.fechaHora}". ¿Podrías decirme de otra forma? Por ejemplo: "martes a las 9" o "mañana a las 14:30"`;
         }
 
-        const recordatorioId = await crearRecordatorio({
+        const recordatorioId = await crearRecordatorioEnSupabase({
           titulo: args.titulo as string,
           descripcion: args.descripcion as string | undefined,
           fechaHora,
           notificarAntes: [0, 15],
         });
-        console.log('[crear_recordatorio] Created with id:', recordatorioId);
 
-        // Sincronizar con Supabase
-        if (supabase && recordatorioId) {
-          const recordatorio = await db.recordatorios.get(recordatorioId);
-          if (recordatorio) {
-            const result = await supabase.from('recordatorios').upsert(recordatorioToSupabase(recordatorio));
-            console.log('[crear_recordatorio] Supabase sync result:', result);
-          }
+        if (!recordatorioId) {
+          return 'Hubo un error al crear el recordatorio. ¿Podrías intentarlo de nuevo?';
         }
 
         return `He creado el recordatorio "${args.titulo}" para ${format(fechaHora, "EEEE d 'de' MMMM 'a las' HH:mm", { locale: es })}. Te avisaré cuando sea el momento.`;
@@ -315,31 +488,7 @@ export async function executeFunction(
 
       case 'listar_tareas': {
         const filtro = (args.filtro as string) || 'pendientes';
-        const allTareas = await db.tareas.toArray();
-        const today = startOfDay(new Date());
-        const todayEnd = endOfDay(new Date());
-
-        let tareas = allTareas.filter(t => !t.parentId);
-
-        if (args.categoria) {
-          tareas = tareas.filter(t => t.categoria === args.categoria);
-        }
-
-        switch (filtro) {
-          case 'hoy':
-            tareas = tareas.filter(t => {
-              if (!t.fechaLimite) return false;
-              const fecha = new Date(t.fechaLimite);
-              return fecha >= today && fecha <= todayEnd;
-            });
-            break;
-          case 'pendientes':
-            tareas = tareas.filter(t => !t.completada);
-            break;
-          case 'completadas':
-            tareas = tareas.filter(t => t.completada);
-            break;
-        }
+        const tareas = await listarTareasDeSupabase(filtro, args.categoria as string | undefined);
 
         if (tareas.length === 0) {
           const mensajes: Record<string, string> = {
@@ -352,7 +501,6 @@ export async function executeFunction(
         }
 
         const lista = tareas
-          .slice(0, 10)
           .map((t, i) => {
             const estado = t.completada ? '✓' : '○';
             const prioridad = t.prioridad === 'alta' ? '🔴' : t.prioridad === 'media' ? '🟡' : '🟢';
@@ -361,60 +509,36 @@ export async function executeFunction(
           .join('\n');
 
         const titulo = filtro === 'hoy' ? 'para hoy' : filtro;
-        return `Aquí están tus tareas ${titulo}:\n\n${lista}${tareas.length > 10 ? `\n\n...y ${tareas.length - 10} más` : ''}`;
+        return `Aquí están tus tareas ${titulo}:\n\n${lista}`;
       }
 
       case 'completar_tarea': {
         const busqueda = (args.busqueda as string).toLowerCase();
-        const tareas = await buscarTareas(busqueda);
+        const resultado = await buscarYCompletarTarea(busqueda);
 
-        const pendientes = tareas.filter(t => !t.completada && !t.parentId);
-
-        if (pendientes.length === 0) {
+        if (!resultado || !resultado.found) {
           return `No encontré ninguna tarea pendiente que coincida con "${args.busqueda}". ¿Quieres que busque de otra manera?`;
         }
 
-        if (pendientes.length === 1) {
-          await completarTarea(pendientes[0].id!);
-          return `¡Genial! He marcado como completada la tarea "${pendientes[0].titulo}". ¡Buen trabajo! 🎉`;
+        if (resultado.completed && resultado.tarea) {
+          return `¡Genial! He marcado como completada la tarea "${resultado.tarea.titulo}". ¡Buen trabajo! 🎉`;
         }
 
-        // Multiple matches
-        const opciones = pendientes
-          .slice(0, 5)
-          .map((t, i) => `${i + 1}. ${t.titulo}`)
-          .join('\n');
+        if (resultado.tareas && resultado.tareas.length > 1) {
+          const opciones = resultado.tareas
+            .slice(0, 5)
+            .map((t, i) => `${i + 1}. ${t.titulo}`)
+            .join('\n');
 
-        return `Encontré varias tareas que coinciden:\n\n${opciones}\n\n¿Cuál quieres completar? Puedes decirme el número o ser más específico.`;
+          return `Encontré varias tareas que coinciden:\n\n${opciones}\n\n¿Cuál quieres completar? Puedes decirme el número o ser más específico.`;
+        }
+
+        return 'No pude completar la tarea. ¿Podrías intentarlo de nuevo?';
       }
 
       case 'listar_recordatorios': {
         const filtro = (args.filtro as string) || 'proximos';
-        const allRecordatorios = await db.recordatorios.toArray();
-        const today = startOfDay(new Date());
-        const todayEnd = endOfDay(new Date());
-        const nextWeek = addDays(new Date(), 7);
-
-        let recordatorios = allRecordatorios.filter(r => !r.completado);
-
-        switch (filtro) {
-          case 'hoy':
-            recordatorios = recordatorios.filter(r => {
-              const fecha = new Date(r.fechaHora);
-              return fecha >= today && fecha <= todayEnd;
-            });
-            break;
-          case 'proximos':
-            recordatorios = recordatorios.filter(r => {
-              const fecha = new Date(r.fechaHora);
-              return fecha >= new Date() && fecha <= nextWeek;
-            });
-            break;
-        }
-
-        recordatorios.sort(
-          (a, b) => new Date(a.fechaHora).getTime() - new Date(b.fechaHora).getTime()
-        );
+        const recordatorios = await listarRecordatoriosDeSupabase(filtro);
 
         if (recordatorios.length === 0) {
           const mensajes: Record<string, string> = {
@@ -426,9 +550,8 @@ export async function executeFunction(
         }
 
         const lista = recordatorios
-          .slice(0, 10)
           .map((r, i) => {
-            const fecha = format(new Date(r.fechaHora), "d/M 'a las' HH:mm", { locale: es });
+            const fecha = format(new Date(r.fecha_hora), "d/M 'a las' HH:mm", { locale: es });
             return `${i + 1}. 🔔 ${r.titulo} - ${fecha}`;
           })
           .join('\n');
