@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { db } from '@/lib/db';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Trash2, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
@@ -9,30 +8,48 @@ export default function ResetPage() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
+  // Check if we just completed a reset
+  useEffect(() => {
+    const resetDone = localStorage.getItem('reset_complete');
+    if (resetDone) {
+      localStorage.removeItem('reset_complete');
+      setStatus('success');
+      setMessage('Todo limpiado correctamente!');
+    }
+  }, []);
+
   const handleReset = async () => {
     setStatus('loading');
-    setMessage('Limpiando...');
+    setMessage('Limpiando Supabase...');
 
     try {
-      // 1. Clear local IndexedDB
-      await db.mensajes.clear();
-      await db.conversaciones.clear();
-      setMessage('IndexedDB local limpiado...');
-
-      // 2. Clear Supabase
+      // 1. Clear Supabase FIRST
       const response = await fetch('/api/cleanup-empty-chats', { method: 'POST' });
       const data = await response.json();
 
-      if (data.success || data.deleted === 0) {
-        setStatus('success');
-        setMessage(`Listo! Eliminadas ${data.deleted || 0} conversaciones de Supabase y todas las locales.`);
-      } else if (data.error) {
-        setStatus('success'); // Local still cleaned
-        setMessage(`IndexedDB limpiado. Supabase: ${data.error}`);
-      } else {
-        setStatus('success');
-        setMessage('Todo limpiado correctamente.');
+      setMessage('Limpiando base de datos local...');
+
+      // 2. Delete the entire IndexedDB database
+      const databases = await window.indexedDB.databases();
+      for (const dbInfo of databases) {
+        if (dbInfo.name) {
+          window.indexedDB.deleteDatabase(dbInfo.name);
+        }
       }
+
+      // 3. Clear all localStorage except essential items
+      localStorage.clear();
+
+      // 4. Mark reset as complete and reload
+      localStorage.setItem('reset_complete', 'true');
+
+      setMessage('Recargando...');
+
+      // 5. Hard reload to clear all React state and caches
+      setTimeout(() => {
+        window.location.href = '/reset?t=' + Date.now();
+      }, 500);
+
     } catch (error) {
       setStatus('error');
       setMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
