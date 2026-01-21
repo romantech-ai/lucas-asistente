@@ -260,6 +260,7 @@ export async function executeFunction(
   name: string,
   args: Record<string, unknown>
 ): Promise<string> {
+  console.log('[AI Function] Executing:', name, 'with args:', JSON.stringify(args));
   try {
     switch (name) {
       case 'crear_tarea': {
@@ -283,10 +284,13 @@ export async function executeFunction(
       }
 
       case 'crear_recordatorio': {
+        console.log('[crear_recordatorio] Raw fechaHora:', args.fechaHora);
         const fechaHora = parseFlexibleDate(args.fechaHora as string);
+        console.log('[crear_recordatorio] Parsed fechaHora:', fechaHora);
 
         if (!fechaHora) {
-          return 'No pude entender la fecha y hora. ¿Podrías especificarla de otra manera?';
+          console.log('[crear_recordatorio] Failed to parse date');
+          return `No pude entender la fecha "${args.fechaHora}". ¿Podrías especificarla de otra manera? (ej: "martes a las 9" o "2024-01-25T09:00")`;
         }
 
         const recordatorioId = await crearRecordatorio({
@@ -295,12 +299,14 @@ export async function executeFunction(
           fechaHora,
           notificarAntes: [0, 15],
         });
+        console.log('[crear_recordatorio] Created with id:', recordatorioId);
 
         // Sincronizar con Supabase
         if (supabase && recordatorioId) {
           const recordatorio = await db.recordatorios.get(recordatorioId);
           if (recordatorio) {
-            await supabase.from('recordatorios').upsert(recordatorioToSupabase(recordatorio));
+            const result = await supabase.from('recordatorios').upsert(recordatorioToSupabase(recordatorio));
+            console.log('[crear_recordatorio] Supabase sync result:', result);
           }
         }
 

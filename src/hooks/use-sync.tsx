@@ -184,10 +184,91 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Sync conversaciones y mensajes - DISABLED to debug ghost conversations
+  // Sync conversaciones y mensajes
   const syncConversaciones = useCallback(async () => {
-    // Temporarily disabled - not syncing conversations
-    return;
+    if (!supabase) return;
+
+    try {
+      // Sync conversaciones
+      const { data: remoteConversaciones, error: convError } = await supabase
+        .from('conversaciones')
+        .select('*');
+
+      if (convError) throw convError;
+
+      const localConversaciones = await db.conversaciones.toArray();
+
+      const remoteConvMap = new Map((remoteConversaciones || []).map(c => [c.id, c]));
+      const localConvMap = new Map(localConversaciones.filter(c => c.id).map(c => [c.id!, c]));
+
+      // Pull conversaciones
+      for (const remote of (remoteConversaciones || [])) {
+        const local = localConvMap.get(remote.id);
+        if (!local) {
+          const conversacion = conversacionFromSupabase(remote);
+          await db.conversaciones.put(conversacion);
+        } else {
+          const remoteDate = new Date(remote.actualizada_en);
+          const localDate = new Date(local.actualizadaEn);
+          if (remoteDate > localDate) {
+            const conversacion = conversacionFromSupabase(remote);
+            await db.conversaciones.put(conversacion);
+          }
+        }
+      }
+
+      // Push conversaciones
+      for (const local of localConversaciones) {
+        if (!local.id) continue;
+        const remote = remoteConvMap.get(local.id);
+        if (!remote) {
+          const supabaseConv = conversacionToSupabase(local);
+          await supabase.from('conversaciones').upsert(supabaseConv);
+        } else {
+          const remoteDate = new Date(remote.actualizada_en);
+          const localDate = new Date(local.actualizadaEn);
+          if (localDate > remoteDate) {
+            const supabaseConv = conversacionToSupabase(local);
+            await supabase.from('conversaciones').upsert(supabaseConv);
+          }
+        }
+      }
+
+      // Sync mensajes
+      const { data: remoteMensajes, error: msgError } = await supabase
+        .from('mensajes')
+        .select('*');
+
+      if (msgError) throw msgError;
+
+      const localMensajes = await db.mensajes.toArray();
+
+      const remoteMsgMap = new Map((remoteMensajes || []).map(m => [m.id, m]));
+      const localMsgMap = new Map(localMensajes.filter(m => m.id).map(m => [m.id!, m]));
+
+      // Pull mensajes
+      for (const remote of (remoteMensajes || [])) {
+        const local = localMsgMap.get(remote.id);
+        if (!local) {
+          const mensaje = mensajeFromSupabase(remote);
+          await db.mensajes.put(mensaje);
+        }
+        // Mensajes are immutable, no need to check for updates
+      }
+
+      // Push mensajes
+      for (const local of localMensajes) {
+        if (!local.id) continue;
+        const remote = remoteMsgMap.get(local.id);
+        if (!remote) {
+          const supabaseMsg = mensajeToSupabase(local);
+          await supabase.from('mensajes').upsert(supabaseMsg);
+        }
+      }
+    } catch (err) {
+      console.error('Error syncing conversaciones:', err);
+      throw err;
+    }
   }, []);
 
   // Sync categorias
@@ -318,13 +399,30 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // DISABLED - not syncing conversations/messages
   const pushConversacion = useCallback(async (id: string) => {
-    return; // Disabled
+    if (!supabase) return;
+    try {
+      const conversacion = await db.conversaciones.get(id);
+      if (conversacion) {
+        const supabaseConv = conversacionToSupabase(conversacion);
+        await supabase.from('conversaciones').upsert(supabaseConv);
+      }
+    } catch (err) {
+      console.error('Error pushing conversacion:', err);
+    }
   }, []);
 
   const pushMensaje = useCallback(async (id: number) => {
-    return; // Disabled
+    if (!supabase) return;
+    try {
+      const mensaje = await db.mensajes.get(id);
+      if (mensaje) {
+        const supabaseMsg = mensajeToSupabase(mensaje);
+        await supabase.from('mensajes').upsert(supabaseMsg);
+      }
+    } catch (err) {
+      console.error('Error pushing mensaje:', err);
+    }
   }, []);
 
   const pushCategoria = useCallback(async (id: number) => {

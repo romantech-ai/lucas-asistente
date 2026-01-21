@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
 
     // Check if the model wants to call tools (puede ser múltiples)
     if (message.tool_calls && message.tool_calls.length > 0) {
+      console.log('[Chat API] Tool calls received:', message.tool_calls.length);
       const toolResults: OpenAI.Chat.Completions.ChatCompletionToolMessageParam[] = [];
       const executedFunctions: string[] = [];
 
@@ -88,9 +89,11 @@ export async function POST(request: NextRequest) {
 
         const functionName = toolCall.function.name;
         const functionArgs = JSON.parse(toolCall.function.arguments);
+        console.log('[Chat API] Executing tool:', functionName, 'args:', functionArgs);
 
         // Execute the function
         const functionResult = await executeFunction(functionName, functionArgs);
+        console.log('[Chat API] Tool result:', functionResult);
         executedFunctions.push(functionName);
 
         toolResults.push({
@@ -124,8 +127,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Chat API error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Error processing chat request' },
+      { error: `Error processing chat request: ${errorMessage}` },
       { status: 500 }
     );
   }
