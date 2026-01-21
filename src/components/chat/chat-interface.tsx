@@ -7,6 +7,7 @@ import { useChat } from '@/hooks/use-chat';
 import MensajeComponent from './mensaje';
 import ChatInput from './chat-input';
 import LucasAvatar from '@/components/lucas/avatar';
+import { CatFaceIcon, PawPrintIcon } from '@/components/icons/cat-icons';
 
 interface ChatInterfaceProps {
   conversacionId: string;
@@ -46,10 +47,14 @@ export default function ChatInterface({ conversacionId }: ChatInterfaceProps) {
               transition={{ delay: 0.3 }}
               className="mt-8"
             >
-              <h2 className="text-2xl font-bold gradient-text mb-2">¡Hola Esther! Soy Lucas 🐱</h2>
-              <p className="text-muted-foreground max-w-sm mx-auto">
-                Tu gatito asistente personal 🐾 Estoy aquí para ayudarte a gestionar
-                tus tareas y recordatorios. ¡Miau! ¡Pregúntame lo que necesites!
+              <h2 className="text-2xl font-bold gradient-text mb-2 flex items-center justify-center gap-2">
+                ¡Hola Esther! Soy Lucas <CatFaceIcon size="lg" />
+              </h2>
+              <p className="text-muted-foreground max-w-sm mx-auto flex flex-col items-center gap-2">
+                <span className="flex items-center gap-1.5">
+                  Tu gatito asistente personal <PawPrintIcon size="sm" />
+                </span>
+                <span>Estoy aquí para ayudarte a gestionar tus tareas y recordatorios. ¡Miau! ¡Pregúntame lo que necesites!</span>
               </p>
             </motion.div>
             <motion.div
@@ -114,7 +119,7 @@ export default function ChatInterface({ conversacionId }: ChatInterfaceProps) {
                         />
                       ))}
                     </motion.div>
-                    <span className="text-sm ml-1">Pensando... 🐾</span>
+                    <span className="text-sm ml-1 flex items-center gap-1">Pensando... <PawPrintIcon size="xs" /></span>
                   </div>
                 </div>
               </motion.div>

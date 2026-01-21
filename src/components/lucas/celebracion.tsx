@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Star, Heart } from 'lucide-react';
+import { CatFaceHappyIcon, PawPrintIcon } from '@/components/icons/cat-icons';
 
 interface CelebracionProps {
   show: boolean;
@@ -125,9 +126,9 @@ export default function Celebracion({ show, onComplete }: CelebracionProps) {
               ) : i % 4 === 1 ? (
                 <Star className="w-5 h-5 fill-current" />
               ) : i % 4 === 2 ? (
-                <span className="text-2xl">🐱</span>
+                <CatFaceHappyIcon size="lg" />
               ) : (
-                <span className="text-xl">🐾</span>
+                <PawPrintIcon size="md" />
               )}
             </motion.div>
           ))}

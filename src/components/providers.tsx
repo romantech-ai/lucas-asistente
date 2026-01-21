@@ -7,6 +7,7 @@ import { registerServiceWorker } from '@/lib/notifications';
 import { useNotificationChecker } from '@/hooks/use-notification-checker';
 import { SyncProvider } from '@/hooks/use-sync';
 import LucasAvatar from '@/components/lucas/avatar';
+import { CatFaceIcon, PawPrintIcon } from '@/components/icons/cat-icons';
 
 function NotificationProvider({ children }: { children: React.ReactNode }) {
   useNotificationChecker();
@@ -45,8 +46,12 @@ function LoadingScreen() {
           transition={{ delay: 0.3 }}
           className="mt-6"
         >
-          <h2 className="text-xl font-semibold gradient-text">Lucas 🐱</h2>
-          <p className="text-sm text-muted-foreground mt-1">Despertando para Esther... 🐾</p>
+          <h2 className="text-xl font-semibold gradient-text flex items-center justify-center gap-2">
+            Lucas <CatFaceIcon size="md" />
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1 flex items-center justify-center gap-1.5">
+            Despertando para Esther... <PawPrintIcon size="sm" />
+          </p>
         </motion.div>
 
         <motion.div

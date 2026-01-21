@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Sparkles } from 'lucide-react';
 import Header from '@/components/layout/header';
+import { CatFaceIcon, CatFaceHappyIcon, CatFaceSleepyIcon, PawPrintIcon } from '@/components/icons/cat-icons';
 import StatsCards from '@/components/dashboard/stats-cards';
 import TareasHoy from '@/components/dashboard/tareas-hoy';
 import TareasPendientes from '@/components/dashboard/tareas-pendientes';
@@ -15,10 +16,16 @@ import Celebracion from '@/components/lucas/celebracion';
 import LucasAvatar from '@/components/lucas/avatar';
 
 function getGreeting(hour: number): string {
-  if (hour < 6) return '¡Buenas noches, Esther! 😺';
-  if (hour < 12) return '¡Buenos días, Esther! 🐱';
-  if (hour < 19) return '¡Buenas tardes, Esther! 😸';
-  return '¡Buenas noches, Esther! 😺';
+  if (hour < 6) return '¡Buenas noches, Esther!';
+  if (hour < 12) return '¡Buenos días, Esther!';
+  if (hour < 19) return '¡Buenas tardes, Esther!';
+  return '¡Buenas noches, Esther!';
+}
+
+function getGreetingIcon(hour: number): 'sleepy' | 'happy' | 'normal' {
+  if (hour < 6 || hour >= 22) return 'sleepy';
+  if (hour >= 6 && hour < 10) return 'sleepy';
+  return 'happy';
 }
 
 function getLucasMood(hour: number): 'happy' | 'thinking' | 'sleeping' | 'excited' {
@@ -35,6 +42,7 @@ export default function DashboardPage() {
 
   const greeting = useMemo(() => getGreeting(hour), [hour]);
   const mood = useMemo(() => getLucasMood(hour), [hour]);
+  const greetingIconType = useMemo(() => getGreetingIcon(hour), [hour]);
 
   const handleComplete = useCallback(() => {
     setShowCelebracion(true);
@@ -80,19 +88,24 @@ export default function DashboardPage() {
                 <h1 className="text-2xl lg:text-3xl font-bold gradient-text">
                   {greeting}
                 </h1>
-                <Sparkles className="w-5 h-5 text-yellow-400" />
+                {greetingIconType === 'sleepy' ? (
+                  <CatFaceSleepyIcon size="lg" />
+                ) : (
+                  <CatFaceHappyIcon size="lg" />
+                )}
               </div>
               <p className="text-lg text-foreground/90">
                 {format(today, "EEEE", { locale: es }).charAt(0).toUpperCase() +
                   format(today, "EEEE", { locale: es }).slice(1)},{' '}
                 {format(today, "d 'de' MMMM", { locale: es })}
               </p>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
                 {mood === 'sleeping'
-                  ? 'Lucas está dormidito... 💤 pero siempre listo para ti, Esther 🐾'
+                  ? 'Lucas está dormidito... pero siempre listo para ti, Esther'
                   : mood === 'thinking'
-                  ? 'Lucas se está despertando para ti... ¡miau! 🐾'
-                  : '¿En qué te puedo ayudar hoy? 🐾'}
+                  ? 'Lucas se está despertando para ti... ¡miau!'
+                  : '¿En qué te puedo ayudar hoy?'}
+                <PawPrintIcon size="sm" />
               </p>
             </div>
           </div>

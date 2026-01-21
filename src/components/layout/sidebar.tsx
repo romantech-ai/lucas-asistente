@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import LucasAvatar from '@/components/lucas/avatar';
+import { CatFaceIcon } from '@/components/icons/cat-icons';
 
 const navItems = [
   { href: '/', label: 'Inicio', icon: LayoutDashboard },
@@ -30,7 +31,9 @@ export default function Sidebar() {
         <LucasAvatar size="sm" />
         <div>
           <h1 className="text-xl font-bold text-sidebar-foreground">Lucas</h1>
-          <p className="text-xs text-muted-foreground">Asistente Personal de Esther 🐱</p>
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            Asistente Personal de Esther <CatFaceIcon size="xs" />
+          </p>
         </div>
       </div>
 
