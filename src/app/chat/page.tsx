@@ -28,6 +28,9 @@ export default function ChatPage() {
   // Auto-create or select conversation
   useEffect(() => {
     const initChat = async () => {
+      // Wait until conversaciones is loaded (undefined = loading, [] = loaded but empty)
+      if (conversaciones === undefined) return;
+
       if (conversaciones.length === 0) {
         const id = await crearConversacion();
         setActiveConversacion(id);
@@ -50,7 +53,7 @@ export default function ChatPage() {
     await eliminarConversacion(conversacionToDelete);
 
     if (activeConversacion === conversacionToDelete) {
-      const remaining = conversaciones.filter(c => c.id !== conversacionToDelete);
+      const remaining = (conversaciones || []).filter(c => c.id !== conversacionToDelete);
       if (remaining.length > 0) {
         setActiveConversacion(remaining[0].id!);
       } else {
@@ -79,7 +82,7 @@ export default function ChatPage() {
 
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
-              {conversaciones.map((conv) => (
+              {(conversaciones || []).map((conv) => (
                 <div
                   key={conv.id}
                   className={cn(
@@ -133,7 +136,7 @@ export default function ChatPage() {
                   <Plus className="w-4 h-4 mr-2" />
                   Nueva
                 </Button>
-                {conversaciones.map((conv) => (
+                {(conversaciones || []).map((conv) => (
                   <div
                     key={conv.id}
                     className={cn(

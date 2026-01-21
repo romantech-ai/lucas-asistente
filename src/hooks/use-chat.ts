@@ -115,7 +115,8 @@ export function useConversaciones() {
     return db.conversaciones.orderBy('actualizadaEn').reverse().toArray();
   });
 
-  return conversaciones || [];
+  // Return undefined while loading, empty array when loaded but empty
+  return conversaciones;
 }
 
 export function useChatActions() {
