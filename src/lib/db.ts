@@ -41,25 +41,6 @@ export async function initializeDb() {
       categoriaDefault: 'Personal',
     });
   }
-
-  // Clean up empty conversations (no messages)
-  await cleanupEmptyConversations();
-}
-
-export async function cleanupEmptyConversations() {
-  const conversaciones = await db.conversaciones.toArray();
-
-  for (const conv of conversaciones) {
-    if (!conv.id) continue;
-    const messageCount = await db.mensajes
-      .where('conversacionId')
-      .equals(conv.id)
-      .count();
-
-    if (messageCount === 0) {
-      await db.conversaciones.delete(conv.id);
-    }
-  }
 }
 
 export { db };

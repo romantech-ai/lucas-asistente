@@ -347,6 +347,32 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Clean up empty conversations (both local and remote)
+  const cleanupEmptyConversations = useCallback(async () => {
+    try {
+      const conversaciones = await db.conversaciones.toArray();
+
+      for (const conv of conversaciones) {
+        if (!conv.id) continue;
+        const messageCount = await db.mensajes
+          .where('conversacionId')
+          .equals(conv.id)
+          .count();
+
+        if (messageCount === 0) {
+          // Delete locally
+          await db.conversaciones.delete(conv.id);
+          // Delete from Supabase
+          if (supabase) {
+            await supabase.from('conversaciones').delete().eq('id', conv.id);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error cleaning up empty conversations:', err);
+    }
+  }, []);
+
   // Sync all
   const syncAll = useCallback(async () => {
     if (!supabase) return;
@@ -363,6 +389,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         syncAjustes(),
       ]);
 
+      // Clean up empty conversations after sync
+      await cleanupEmptyConversations();
+
       setStatus('synced');
       setLastSynced(new Date());
     } catch (err) {
@@ -370,7 +399,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Error de sincronización');
     }
-  }, [syncTareas, syncRecordatorios, syncConversaciones, syncCategorias, syncAjustes]);
+  }, [syncTareas, syncRecordatorios, syncConversaciones, syncCategorias, syncAjustes, cleanupEmptyConversations]);
 
   // Push individual items (for immediate sync after local changes)
   const pushTarea = useCallback(async (id: number) => {
