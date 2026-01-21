@@ -1,7 +1,11 @@
 import { supabase, tareaToSupabase, recordatorioToSupabase } from '@/lib/supabase';
 import { format, startOfDay, endOfDay, addDays, parseISO, isValid, setHours, setMinutes, getDay, nextDay, addWeeks } from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { es } from 'date-fns/locale';
 import type { Tarea, Recordatorio, Prioridad } from '@/types';
+
+// Zona horaria del usuario (España)
+const USER_TIMEZONE = 'Europe/Madrid';
 
 // Mapeo de días de la semana en español a índices (0 = domingo, 1 = lunes, etc.)
 const DIAS_SEMANA: Record<string, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
@@ -155,20 +159,10 @@ function extractTime(str: string): { hours: number; minutes: number } | null {
   return null;
 }
 
-function getNextDayOfWeek(dayIndex: 0 | 1 | 2 | 3 | 4 | 5 | 6): Date {
-  const today = new Date();
-  const currentDay = getDay(today) as 0 | 1 | 2 | 3 | 4 | 5 | 6;
-
-  if (currentDay === dayIndex) {
-    // Si es el mismo día, devolver la próxima semana
-    return addDays(today, 7);
-  }
-
-  return nextDay(today, dayIndex);
-}
-
 function parseFlexibleDate(dateStr: string): Date | null {
-  const today = new Date();
+  // Trabajamos en hora de España
+  const nowUtc = new Date();
+  const nowInSpain = toZonedTime(nowUtc, USER_TIMEZONE);
   const lowerStr = dateStr.toLowerCase().trim();
   const timeInfo = extractTime(lowerStr);
 
@@ -176,11 +170,11 @@ function parseFlexibleDate(dateStr: string): Date | null {
 
   // 1. Fechas relativas simples
   if (/^hoy|today/.test(lowerStr)) {
-    resultDate = today;
+    resultDate = nowInSpain;
   } else if (/^mañana|^manana|tomorrow/.test(lowerStr)) {
-    resultDate = addDays(today, 1);
+    resultDate = addDays(nowInSpain, 1);
   } else if (/^pasado\s*mañana|^pasado\s*manana/.test(lowerStr)) {
-    resultDate = addDays(today, 2);
+    resultDate = addDays(nowInSpain, 2);
   }
 
   // 2. Días de la semana
@@ -188,7 +182,13 @@ function parseFlexibleDate(dateStr: string): Date | null {
     for (const [dia, index] of Object.entries(DIAS_SEMANA)) {
       const diaPattern = new RegExp(`(?:el\\s+|este\\s+|pr[oó]ximo\\s+)?${dia}`, 'i');
       if (diaPattern.test(lowerStr)) {
-        resultDate = getNextDayOfWeek(index as 0 | 1 | 2 | 3 | 4 | 5 | 6);
+        const currentDay = getDay(nowInSpain) as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+        const targetDay = index as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+        if (currentDay === targetDay) {
+          resultDate = addDays(nowInSpain, 7);
+        } else {
+          resultDate = nextDay(nowInSpain, targetDay);
+        }
         break;
       }
     }
@@ -198,13 +198,13 @@ function parseFlexibleDate(dateStr: string): Date | null {
   if (!resultDate) {
     const enDiasMatch = lowerStr.match(/(?:en|dentro de)\s+(\d+)\s*d[ií]as?/i);
     if (enDiasMatch) {
-      resultDate = addDays(today, parseInt(enDiasMatch[1], 10));
+      resultDate = addDays(nowInSpain, parseInt(enDiasMatch[1], 10));
     }
   }
 
   // 4. "la próxima semana"
   if (!resultDate && /pr[oó]xima\s+semana|siguiente\s+semana/.test(lowerStr)) {
-    resultDate = addWeeks(today, 1);
+    resultDate = addWeeks(nowInSpain, 1);
   }
 
   // 5. Intentar parsear como ISO
@@ -227,15 +227,17 @@ function parseFlexibleDate(dateStr: string): Date | null {
     }
   }
 
-  // Si no encontramos fecha pero sí hora, usar hoy
+  // Si no encontramos fecha pero sí hora, usar hoy en España
   if (!resultDate && timeInfo) {
-    resultDate = today;
+    resultDate = nowInSpain;
   }
 
-  // Aplicar la hora si existe
+  // Aplicar la hora si existe (en hora de España)
   if (resultDate && timeInfo) {
     resultDate = setHours(resultDate, timeInfo.hours);
     resultDate = setMinutes(resultDate, timeInfo.minutes);
+    resultDate.setSeconds(0);
+    resultDate.setMilliseconds(0);
   } else if (resultDate) {
     // Si no hay hora específica, poner una hora por defecto (9:00)
     const currentHours = resultDate.getHours();
@@ -243,6 +245,11 @@ function parseFlexibleDate(dateStr: string): Date | null {
       resultDate = setHours(resultDate, 9);
       resultDate = setMinutes(resultDate, 0);
     }
+  }
+
+  // Convertir de hora España a UTC para guardar en base de datos
+  if (resultDate) {
+    resultDate = fromZonedTime(resultDate, USER_TIMEZONE);
   }
 
   return resultDate;
@@ -457,7 +464,7 @@ export async function executeFunction(
         }
 
         const fechaStr = fechaLimite
-          ? ` para ${format(fechaLimite, "EEEE d 'de' MMMM", { locale: es })}`
+          ? ` para ${format(toZonedTime(fechaLimite, USER_TIMEZONE), "EEEE d 'de' MMMM", { locale: es })}`
           : '';
 
         return `He creado la tarea "${args.titulo}"${fechaStr}. ¡Ya está en tu lista!`;
@@ -483,7 +490,9 @@ export async function executeFunction(
           return 'Hubo un error al crear el recordatorio. ¿Podrías intentarlo de nuevo?';
         }
 
-        return `He creado el recordatorio "${args.titulo}" para ${format(fechaHora, "EEEE d 'de' MMMM 'a las' HH:mm", { locale: es })}. Te avisaré cuando sea el momento.`;
+        // Convertir de UTC a hora España para mostrar al usuario
+        const fechaHoraEspana = toZonedTime(fechaHora, USER_TIMEZONE);
+        return `He creado el recordatorio "${args.titulo}" para ${format(fechaHoraEspana, "EEEE d 'de' MMMM 'a las' HH:mm", { locale: es })}. Te avisaré cuando sea el momento.`;
       }
 
       case 'listar_tareas': {
