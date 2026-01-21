@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, MessageSquare, Trash2 } from 'lucide-react';
 import Header from '@/components/layout/header';
 import ChatInterface from '@/components/chat/chat-interface';
@@ -24,28 +24,24 @@ export default function ChatPage() {
   const [activeConversacion, setActiveConversacion] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [conversacionToDelete, setConversacionToDelete] = useState<string | null>(null);
-  const hasInitialized = useRef(false);
 
-  // Auto-create or select conversation - only once on initial load
+  // Select first conversation if none selected (but don't create new ones)
   useEffect(() => {
-    const initChat = async () => {
-      // Wait until conversaciones is loaded (undefined = loading)
-      if (conversaciones === undefined) return;
+    if (conversaciones === undefined) return;
 
-      // Only initialize once
-      if (hasInitialized.current) return;
-      hasInitialized.current = true;
+    // If we have conversations but none selected, select the first one
+    if (conversaciones.length > 0 && !activeConversacion) {
+      setActiveConversacion(conversaciones[0].id!);
+    }
 
-      if (conversaciones.length === 0) {
-        const id = await crearConversacion();
-        setActiveConversacion(id);
-      } else {
+    // If active conversation was deleted, select another or clear
+    if (activeConversacion && conversaciones.length > 0) {
+      const exists = conversaciones.some(c => c.id === activeConversacion);
+      if (!exists) {
         setActiveConversacion(conversaciones[0].id!);
       }
-    };
-
-    initChat();
-  }, [conversaciones]);
+    }
+  }, [conversaciones, activeConversacion]);
 
   const handleNewConversation = async () => {
     const id = await crearConversacion();
@@ -62,8 +58,7 @@ export default function ChatPage() {
       if (remaining.length > 0) {
         setActiveConversacion(remaining[0].id!);
       } else {
-        const id = await crearConversacion();
-        setActiveConversacion(id);
+        setActiveConversacion(null);
       }
     }
 
@@ -163,8 +158,20 @@ export default function ChatPage() {
 
         {/* Chat interface */}
         <div className="flex-1 pt-12 lg:pt-0">
-          {activeConversacion && (
+          {activeConversacion ? (
             <ChatInterface conversacionId={activeConversacion} />
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center">
+              <MessageSquare className="w-16 h-16 text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-medium mb-2">No hay conversaciones</h3>
+              <p className="text-muted-foreground mb-4">
+                Empieza una nueva conversación con Lucas
+              </p>
+              <Button onClick={handleNewConversation}>
+                <Plus className="w-4 h-4 mr-2" />
+                Nueva conversación
+              </Button>
+            </div>
           )}
         </div>
       </div>

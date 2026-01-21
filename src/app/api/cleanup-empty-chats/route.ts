@@ -7,50 +7,25 @@ export async function POST() {
   }
 
   try {
-    // Get all conversations from Supabase
-    const { data: conversaciones, error: convError } = await supabase
+    // Delete ALL messages first (foreign key constraint)
+    const { error: msgError } = await supabase
+      .from('mensajes')
+      .delete()
+      .neq('id', 0); // Delete all
+
+    if (msgError) throw msgError;
+
+    // Delete ALL conversations
+    const { error: convError } = await supabase
       .from('conversaciones')
-      .select('id');
+      .delete()
+      .neq('id', ''); // Delete all
 
     if (convError) throw convError;
 
-    if (!conversaciones || conversaciones.length === 0) {
-      return NextResponse.json({ message: 'No conversations found', deleted: 0 });
-    }
-
-    let deletedCount = 0;
-
-    // Check each conversation for messages
-    for (const conv of conversaciones) {
-      const { count, error: countError } = await supabase
-        .from('mensajes')
-        .select('*', { count: 'exact', head: true })
-        .eq('conversacion_id', conv.id);
-
-      if (countError) {
-        console.error('Error counting messages:', countError);
-        continue;
-      }
-
-      // If no messages, delete the conversation
-      if (count === 0) {
-        const { error: deleteError } = await supabase
-          .from('conversaciones')
-          .delete()
-          .eq('id', conv.id);
-
-        if (deleteError) {
-          console.error('Error deleting conversation:', deleteError);
-        } else {
-          deletedCount++;
-        }
-      }
-    }
-
     return NextResponse.json({
-      message: `Cleanup complete`,
-      deleted: deletedCount,
-      total: conversaciones.length
+      message: 'All conversations and messages deleted from Supabase',
+      success: true
     });
   } catch (error) {
     console.error('Cleanup error:', error);
