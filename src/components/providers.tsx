@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { initializeDb } from '@/lib/db';
 import { registerServiceWorker } from '@/lib/notifications';
 import { useNotificationChecker } from '@/hooks/use-notification-checker';
+import { SyncProvider } from '@/hooks/use-sync';
 import LucasAvatar from '@/components/lucas/avatar';
 
 function NotificationProvider({ children }: { children: React.ReactNode }) {
@@ -93,8 +94,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <NotificationProvider>
-      {children}
-    </NotificationProvider>
+    <SyncProvider>
+      <NotificationProvider>
+        {children}
+      </NotificationProvider>
+    </SyncProvider>
   );
 }

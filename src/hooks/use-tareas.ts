@@ -2,6 +2,7 @@
 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
+import { useSync } from '@/hooks/use-sync';
 import type { Tarea, FiltroTareas, Prioridad } from '@/types';
 import {
   startOfDay,
@@ -75,6 +76,74 @@ export function useTarea(id: number) {
   return useLiveQuery(() => db.tareas.get(id), [id]);
 }
 
+export function useTareasActions() {
+  const { pushTarea, deleteTareaRemote } = useSync();
+
+  const crearTarea = async (
+    tarea: Omit<Tarea, 'id' | 'creadaEn' | 'actualizadaEn' | 'orden' | 'completada'>
+  ): Promise<number> => {
+    const count = await db.tareas.count();
+    const now = new Date();
+
+    const id = await db.tareas.add({
+      ...tarea,
+      completada: false,
+      orden: count,
+      creadaEn: now,
+      actualizadaEn: now,
+    } as Tarea);
+
+    // Sync to Supabase
+    pushTarea(id as number);
+
+    return id as number;
+  };
+
+  const actualizarTarea = async (id: number, cambios: Partial<Tarea>): Promise<void> => {
+    await db.tareas.update(id, {
+      ...cambios,
+      actualizadaEn: new Date(),
+    });
+
+    // Sync to Supabase
+    pushTarea(id);
+  };
+
+  const completarTarea = async (id: number): Promise<void> => {
+    const tarea = await db.tareas.get(id);
+    if (!tarea) return;
+
+    await db.tareas.update(id, {
+      completada: !tarea.completada,
+      completadaEn: !tarea.completada ? new Date() : undefined,
+      actualizadaEn: new Date(),
+    });
+
+    // Sync to Supabase
+    pushTarea(id);
+  };
+
+  const eliminarTarea = async (id: number): Promise<void> => {
+    // Get subtasks to delete from remote too
+    const subtareas = await db.tareas.where('parentId').equals(id).toArray();
+
+    // Delete locally
+    await db.tareas.where('parentId').equals(id).delete();
+    await db.tareas.delete(id);
+
+    // Delete from Supabase
+    for (const subtarea of subtareas) {
+      if (subtarea.id) {
+        deleteTareaRemote(subtarea.id);
+      }
+    }
+    deleteTareaRemote(id);
+  };
+
+  return { crearTarea, actualizarTarea, completarTarea, eliminarTarea };
+}
+
+// Standalone functions for backward compatibility (without sync)
 export async function crearTarea(
   tarea: Omit<Tarea, 'id' | 'creadaEn' | 'actualizadaEn' | 'orden' | 'completada'>
 ): Promise<number> {

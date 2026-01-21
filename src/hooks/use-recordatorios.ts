@@ -2,6 +2,7 @@
 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
+import { useSync } from '@/hooks/use-sync';
 import type { Recordatorio, FiltroRecordatorios } from '@/types';
 import {
   startOfDay,
@@ -55,6 +56,90 @@ export function useRecordatorio(id: number) {
   return useLiveQuery(() => db.recordatorios.get(id), [id]);
 }
 
+export function useRecordatoriosActions() {
+  const { pushRecordatorio, deleteRecordatorioRemote } = useSync();
+
+  const crearRecordatorio = async (
+    recordatorio: Omit<Recordatorio, 'id' | 'creadoEn' | 'actualizadoEn' | 'completado' | 'notificacionesEnviadas' | 'exportadoACalendar'>
+  ): Promise<number> => {
+    const now = new Date();
+
+    const id = await db.recordatorios.add({
+      ...recordatorio,
+      completado: false,
+      notificacionesEnviadas: [],
+      exportadoACalendar: false,
+      creadoEn: now,
+      actualizadoEn: now,
+    } as Recordatorio);
+
+    // Sync to Supabase
+    pushRecordatorio(id as number);
+
+    return id as number;
+  };
+
+  const actualizarRecordatorio = async (
+    id: number,
+    cambios: Partial<Recordatorio>
+  ): Promise<void> => {
+    await db.recordatorios.update(id, {
+      ...cambios,
+      actualizadoEn: new Date(),
+    });
+
+    // Sync to Supabase
+    pushRecordatorio(id);
+  };
+
+  const completarRecordatorio = async (id: number): Promise<void> => {
+    const recordatorio = await db.recordatorios.get(id);
+    if (!recordatorio) return;
+
+    await db.recordatorios.update(id, {
+      completado: !recordatorio.completado,
+      actualizadoEn: new Date(),
+    });
+
+    // Sync to Supabase
+    pushRecordatorio(id);
+  };
+
+  const eliminarRecordatorio = async (id: number): Promise<void> => {
+    await db.recordatorios.delete(id);
+
+    // Delete from Supabase
+    deleteRecordatorioRemote(id);
+  };
+
+  const marcarNotificacionEnviada = async (
+    id: number,
+    minutosAntes: number
+  ): Promise<void> => {
+    const recordatorio = await db.recordatorios.get(id);
+    if (!recordatorio) return;
+
+    const enviadas = [...(recordatorio.notificacionesEnviadas || []), minutosAntes];
+
+    await db.recordatorios.update(id, {
+      notificacionesEnviadas: enviadas,
+      actualizadoEn: new Date(),
+    });
+
+    // Sync to Supabase
+    pushRecordatorio(id);
+  };
+
+  return {
+    crearRecordatorio,
+    actualizarRecordatorio,
+    completarRecordatorio,
+    eliminarRecordatorio,
+    marcarNotificacionEnviada,
+  };
+}
+
+// Standalone functions for backward compatibility (without sync)
 export async function crearRecordatorio(
   recordatorio: Omit<Recordatorio, 'id' | 'creadoEn' | 'actualizadoEn' | 'completado' | 'notificacionesEnviadas' | 'exportadoACalendar'>
 ): Promise<number> {

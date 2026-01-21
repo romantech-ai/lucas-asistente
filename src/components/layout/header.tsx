@@ -5,6 +5,7 @@ import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import LucasAvatar from '@/components/lucas/avatar';
+import { SyncStatusIndicator } from '@/components/sync-status';
 
 interface HeaderProps {
   title: string;
@@ -37,39 +38,43 @@ export default function Header({ title, showSearch = false, onSearch }: HeaderPr
 
         <h1 className="hidden lg:block text-lg font-semibold">{title}</h1>
 
-        {showSearch && (
-          <div className="flex items-center gap-2">
-            {searchOpen ? (
-              <div className="flex items-center gap-2">
-                <Input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={searchQuery}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  className="w-48 md:w-64 h-9"
-                  autoFocus
-                />
+        <div className="flex items-center gap-2">
+          <SyncStatusIndicator showLabel />
+
+          {showSearch && (
+            <>
+              {searchOpen ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="text"
+                    placeholder="Buscar..."
+                    value={searchQuery}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    className="w-48 md:w-64 h-9"
+                    autoFocus
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={clearSearch}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-9 w-9"
-                  onClick={clearSearch}
+                  onClick={() => setSearchOpen(true)}
                 >
-                  <X className="w-4 h-4" />
+                  <Search className="w-4 h-4" />
                 </Button>
-              </div>
-            ) : (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9"
-                onClick={() => setSearchOpen(true)}
-              >
-                <Search className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-        )}
+              )}
+            </>
+          )}
+        </div>
       </div>
     </header>
   );

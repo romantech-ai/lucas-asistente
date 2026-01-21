@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
+import { useSync } from '@/hooks/use-sync';
 import type { Mensaje, Conversacion } from '@/types';
 
 interface ChatMessage {
@@ -13,6 +14,7 @@ interface ChatMessage {
 export function useChat(conversacionId?: string) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { pushConversacion, pushMensaje } = useSync();
 
   const mensajes = useLiveQuery(async () => {
     if (!conversacionId) return [];
@@ -30,12 +32,15 @@ export function useChat(conversacionId?: string) {
 
     try {
       // Save user message
-      await db.mensajes.add({
+      const userMsgId = await db.mensajes.add({
         conversacionId,
         rol: 'user',
         contenido: content,
         creadoEn: new Date(),
       });
+
+      // Sync user message to Supabase
+      pushMensaje(userMsgId as number);
 
       // Get conversation history for context
       const history = await db.mensajes
@@ -69,17 +74,23 @@ export function useChat(conversacionId?: string) {
       }
 
       // Save assistant message
-      await db.mensajes.add({
+      const assistantMsgId = await db.mensajes.add({
         conversacionId,
         rol: 'assistant',
         contenido: data.content,
         creadoEn: new Date(),
       });
 
+      // Sync assistant message to Supabase
+      pushMensaje(assistantMsgId as number);
+
       // Update conversation timestamp
       await db.conversaciones.update(conversacionId, {
         actualizadaEn: new Date(),
       });
+
+      // Sync conversation update to Supabase
+      pushConversacion(conversacionId);
 
       return data.content;
     } catch (err) {
@@ -89,7 +100,7 @@ export function useChat(conversacionId?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [conversacionId]);
+  }, [conversacionId, pushMensaje, pushConversacion]);
 
   return {
     mensajes: mensajes || [],
@@ -107,6 +118,38 @@ export function useConversaciones() {
   return conversaciones || [];
 }
 
+export function useChatActions() {
+  const { pushConversacion, deleteConversacionRemote } = useSync();
+
+  const crearConversacion = async (titulo?: string): Promise<string> => {
+    const id = crypto.randomUUID();
+    const now = new Date();
+
+    await db.conversaciones.add({
+      id,
+      titulo: titulo || `Chat ${new Date().toLocaleDateString('es-ES')}`,
+      creadaEn: now,
+      actualizadaEn: now,
+    });
+
+    // Sync to Supabase
+    pushConversacion(id);
+
+    return id;
+  };
+
+  const eliminarConversacion = async (id: string): Promise<void> => {
+    await db.mensajes.where('conversacionId').equals(id).delete();
+    await db.conversaciones.delete(id);
+
+    // Delete from Supabase
+    deleteConversacionRemote(id);
+  };
+
+  return { crearConversacion, eliminarConversacion };
+}
+
+// Standalone functions for backward compatibility (without sync)
 export async function crearConversacion(titulo?: string): Promise<string> {
   const id = crypto.randomUUID();
   const now = new Date();
