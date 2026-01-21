@@ -7,44 +7,40 @@ export async function POST() {
   }
 
   try {
-    // Get all conversation IDs first
-    const { data: conversaciones, error: fetchError } = await supabase
+    // Count before
+    const { count: beforeCount } = await supabase
       .from('conversaciones')
-      .select('id');
+      .select('*', { count: 'exact', head: true });
 
-    if (fetchError) {
-      return NextResponse.json({ error: `Fetch error: ${fetchError.message}` }, { status: 500 });
-    }
-
-    if (!conversaciones || conversaciones.length === 0) {
-      return NextResponse.json({ message: 'No conversations to delete', deleted: 0 });
-    }
-
-    const convIds = conversaciones.map(c => c.id);
-
-    // Delete messages for these conversations
+    // Delete ALL messages (gte empty string matches all UUIDs)
     const { error: msgError } = await supabase
       .from('mensajes')
       .delete()
-      .in('conversacion_id', convIds);
+      .gte('id', 0);
 
     if (msgError) {
       return NextResponse.json({ error: `Message delete error: ${msgError.message}` }, { status: 500 });
     }
 
-    // Delete all conversations
+    // Delete ALL conversations (gte empty string matches all UUIDs)
     const { error: convError } = await supabase
       .from('conversaciones')
       .delete()
-      .in('id', convIds);
+      .gte('creada_en', '1970-01-01');
 
     if (convError) {
       return NextResponse.json({ error: `Conversation delete error: ${convError.message}` }, { status: 500 });
     }
 
+    // Count after
+    const { count: afterCount } = await supabase
+      .from('conversaciones')
+      .select('*', { count: 'exact', head: true });
+
     return NextResponse.json({
       message: 'All conversations and messages deleted from Supabase',
-      deleted: convIds.length,
+      before: beforeCount,
+      after: afterCount,
       success: true
     });
   } catch (error) {
