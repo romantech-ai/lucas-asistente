@@ -96,8 +96,8 @@ export default function Celebracion({ show, onComplete }: CelebracionProps) {
             </motion.div>
           </motion.div>
 
-          {/* Floating hearts and stars */}
-          {[...Array(8)].map((_, i) => (
+          {/* Floating hearts, stars, cats and paw prints */}
+          {[...Array(12)].map((_, i) => (
             <motion.div
               key={i}
               initial={{
@@ -109,21 +109,25 @@ export default function Celebracion({ show, onComplete }: CelebracionProps) {
               animate={{
                 opacity: [0, 1, 0],
                 scale: [0, 1, 0.5],
-                x: (Math.random() - 0.5) * 300,
-                y: (Math.random() - 0.5) * 300
+                x: (Math.random() - 0.5) * 350,
+                y: (Math.random() - 0.5) * 350
               }}
               transition={{
                 duration: 1.5,
-                delay: i * 0.1,
+                delay: i * 0.08,
                 ease: 'easeOut'
               }}
               className="absolute"
               style={{ color: confettiColors[i % confettiColors.length] }}
             >
-              {i % 2 === 0 ? (
+              {i % 4 === 0 ? (
                 <Heart className="w-6 h-6 fill-current" />
-              ) : (
+              ) : i % 4 === 1 ? (
                 <Star className="w-5 h-5 fill-current" />
+              ) : i % 4 === 2 ? (
+                <span className="text-2xl">🐱</span>
+              ) : (
+                <span className="text-xl">🐾</span>
               )}
             </motion.div>
           ))}

@@ -45,8 +45,8 @@ function LoadingScreen() {
           transition={{ delay: 0.3 }}
           className="mt-6"
         >
-          <h2 className="text-xl font-semibold gradient-text">Lucas</h2>
-          <p className="text-sm text-muted-foreground mt-1">Despertando...</p>
+          <h2 className="text-xl font-semibold gradient-text">Lucas 🐱</h2>
+          <p className="text-sm text-muted-foreground mt-1">Despertando para Esther... 🐾</p>
         </motion.div>
 
         <motion.div

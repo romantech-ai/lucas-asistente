@@ -30,7 +30,7 @@ export default function Sidebar() {
         <LucasAvatar size="sm" />
         <div>
           <h1 className="text-xl font-bold text-sidebar-foreground">Lucas</h1>
-          <p className="text-xs text-muted-foreground">Tu asistente personal</p>
+          <p className="text-xs text-muted-foreground">Asistente Personal de Esther 🐱</p>
         </div>
       </div>
 

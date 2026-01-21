@@ -46,10 +46,10 @@ export default function ChatInterface({ conversacionId }: ChatInterfaceProps) {
               transition={{ delay: 0.3 }}
               className="mt-8"
             >
-              <h2 className="text-2xl font-bold gradient-text mb-2">¡Hola! Soy Lucas</h2>
+              <h2 className="text-2xl font-bold gradient-text mb-2">¡Hola Esther! Soy Lucas 🐱</h2>
               <p className="text-muted-foreground max-w-sm mx-auto">
-                Tu asistente personal gatuno. Puedo ayudarte a gestionar tus tareas
-                y recordatorios. ¡Pregúntame lo que necesites!
+                Tu gatito asistente personal 🐾 Estoy aquí para ayudarte a gestionar
+                tus tareas y recordatorios. ¡Miau! ¡Pregúntame lo que necesites!
               </p>
             </motion.div>
             <motion.div
@@ -114,7 +114,7 @@ export default function ChatInterface({ conversacionId }: ChatInterfaceProps) {
                         />
                       ))}
                     </motion.div>
-                    <span className="text-sm ml-1">Pensando...</span>
+                    <span className="text-sm ml-1">Pensando... 🐾</span>
                   </div>
                 </div>
               </motion.div>

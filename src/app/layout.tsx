@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lucas - Tu Asistente Personal",
-  description: "Asistente personal con gatito adorable para gestionar tus tareas y recordatorios",
+  title: "Lucas - Asistente Personal de Esther",
+  description: "Lucas, el gatito de Esther, tu adorable asistente personal para gestionar tus tareas y recordatorios 🐱",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

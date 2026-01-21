@@ -15,10 +15,10 @@ import Celebracion from '@/components/lucas/celebracion';
 import LucasAvatar from '@/components/lucas/avatar';
 
 function getGreeting(hour: number): string {
-  if (hour < 6) return '¡Buenas noches!';
-  if (hour < 12) return '¡Buenos días!';
-  if (hour < 19) return '¡Buenas tardes!';
-  return '¡Buenas noches!';
+  if (hour < 6) return '¡Buenas noches, Esther! 😺';
+  if (hour < 12) return '¡Buenos días, Esther! 🐱';
+  if (hour < 19) return '¡Buenas tardes, Esther! 😸';
+  return '¡Buenas noches, Esther! 😺';
 }
 
 function getLucasMood(hour: number): 'happy' | 'thinking' | 'sleeping' | 'excited' {
@@ -89,10 +89,10 @@ export default function DashboardPage() {
               </p>
               <p className="text-sm text-muted-foreground mt-1">
                 {mood === 'sleeping'
-                  ? 'Lucas está dormidito... pero siempre listo para ayudarte'
+                  ? 'Lucas está dormidito... 💤 pero siempre listo para ti, Esther 🐾'
                   : mood === 'thinking'
-                  ? 'Lucas se está despertando... ¡vamos a por el día!'
-                  : '¿En qué te puedo ayudar hoy?'}
+                  ? 'Lucas se está despertando para ti... ¡miau! 🐾'
+                  : '¿En qué te puedo ayudar hoy? 🐾'}
               </p>
             </div>
           </div>
