@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, MessageSquare, Trash2 } from 'lucide-react';
 import Header from '@/components/layout/header';
 import ChatInterface from '@/components/chat/chat-interface';
@@ -24,23 +24,28 @@ export default function ChatPage() {
   const [activeConversacion, setActiveConversacion] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [conversacionToDelete, setConversacionToDelete] = useState<string | null>(null);
+  const hasInitialized = useRef(false);
 
-  // Auto-create or select conversation
+  // Auto-create or select conversation - only once on initial load
   useEffect(() => {
     const initChat = async () => {
-      // Wait until conversaciones is loaded (undefined = loading, [] = loaded but empty)
+      // Wait until conversaciones is loaded (undefined = loading)
       if (conversaciones === undefined) return;
+
+      // Only initialize once
+      if (hasInitialized.current) return;
+      hasInitialized.current = true;
 
       if (conversaciones.length === 0) {
         const id = await crearConversacion();
         setActiveConversacion(id);
-      } else if (!activeConversacion) {
+      } else {
         setActiveConversacion(conversaciones[0].id!);
       }
     };
 
     initChat();
-  }, [conversaciones, activeConversacion]);
+  }, [conversaciones]);
 
   const handleNewConversation = async () => {
     const id = await crearConversacion();
