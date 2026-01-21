@@ -2,9 +2,22 @@ import { db } from '@/lib/db';
 import { crearTarea, buscarTareas, completarTarea } from '@/hooks/use-tareas';
 import { crearRecordatorio } from '@/hooks/use-recordatorios';
 import { supabase, recordatorioToSupabase } from '@/lib/supabase';
-import { format, startOfDay, endOfDay, addDays, parseISO, isValid } from 'date-fns';
+import { format, startOfDay, endOfDay, addDays, parseISO, isValid, setHours, setMinutes, getDay, nextDay, addWeeks } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { Tarea, Recordatorio, Prioridad } from '@/types';
+
+// Mapeo de días de la semana en español a índices (0 = domingo, 1 = lunes, etc.)
+const DIAS_SEMANA: Record<string, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
+  'domingo': 0,
+  'lunes': 1,
+  'martes': 2,
+  'miercoles': 3,
+  'miércoles': 3,
+  'jueves': 4,
+  'viernes': 5,
+  'sabado': 6,
+  'sábado': 6,
+};
 
 export const AI_FUNCTIONS = [
   {
@@ -108,38 +121,139 @@ export const AI_FUNCTIONS = [
   },
 ];
 
-function parseFlexibleDate(dateStr: string): Date | null {
-  // Handle relative dates
-  const today = new Date();
-  const lowerStr = dateStr.toLowerCase();
+function extractTime(str: string): { hours: number; minutes: number } | null {
+  // Patrones de hora: "9", "9:00", "9:30", "09:00", "21:00", "9am", "9pm", "9 am", "9 de la mañana", "9 de la tarde"
+  const patterns = [
+    /(\d{1,2}):(\d{2})/,                           // 9:00, 09:30, 21:00
+    /(\d{1,2})\s*(am|a\.m\.|a\.m)/i,               // 9am, 9 am, 9 a.m.
+    /(\d{1,2})\s*(pm|p\.m\.|p\.m)/i,               // 9pm, 9 pm, 9 p.m.
+    /(\d{1,2})\s*de la mañana/i,                   // 9 de la mañana
+    /(\d{1,2})\s*de la tarde/i,                    // 5 de la tarde
+    /(\d{1,2})\s*de la noche/i,                    // 9 de la noche
+    /a las (\d{1,2})(?::(\d{2}))?/i,               // a las 9, a las 9:30
+    /(\d{1,2})\s*(?:hrs?|horas?)/i,                // 9h, 9hrs, 9 horas
+  ];
 
-  if (lowerStr === 'hoy' || lowerStr === 'today') {
-    return today;
-  }
-  if (lowerStr === 'mañana' || lowerStr === 'manana' || lowerStr === 'tomorrow') {
-    return addDays(today, 1);
-  }
-  if (lowerStr === 'pasado mañana' || lowerStr === 'pasado manana') {
-    return addDays(today, 2);
-  }
+  for (const pattern of patterns) {
+    const match = str.match(pattern);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      let minutes = match[2] ? parseInt(match[2], 10) : 0;
 
-  // Try parsing ISO format
-  try {
-    const parsed = parseISO(dateStr);
-    if (isValid(parsed)) {
-      return parsed;
+      // Ajustar PM
+      if (/pm|p\.m|de la tarde/i.test(str) && hours < 12) {
+        hours += 12;
+      }
+      if (/de la noche/i.test(str) && hours < 12) {
+        hours += 12;
+      }
+      // Ajustar AM (12am = 0)
+      if (/am|a\.m|de la mañana/i.test(str) && hours === 12) {
+        hours = 0;
+      }
+
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        return { hours, minutes };
+      }
     }
-  } catch {
-    // Continue to other methods
-  }
-
-  // Try parsing as a regular date
-  const date = new Date(dateStr);
-  if (isValid(date)) {
-    return date;
   }
 
   return null;
+}
+
+function getNextDayOfWeek(dayIndex: 0 | 1 | 2 | 3 | 4 | 5 | 6, includeToday = false): Date {
+  const today = new Date();
+  const currentDay = getDay(today) as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+  if (includeToday && currentDay === dayIndex) {
+    return today;
+  }
+
+  return nextDay(today, dayIndex);
+}
+
+function parseFlexibleDate(dateStr: string): Date | null {
+  const today = new Date();
+  const lowerStr = dateStr.toLowerCase().trim();
+
+  // Extraer hora si existe
+  const timeInfo = extractTime(lowerStr);
+
+  let resultDate: Date | null = null;
+
+  // 1. Fechas relativas simples
+  if (/^hoy|today/.test(lowerStr)) {
+    resultDate = today;
+  } else if (/^mañana|^manana|tomorrow/.test(lowerStr)) {
+    resultDate = addDays(today, 1);
+  } else if (/^pasado\s*mañana|^pasado\s*manana/.test(lowerStr)) {
+    resultDate = addDays(today, 2);
+  }
+
+  // 2. Días de la semana
+  if (!resultDate) {
+    for (const [dia, index] of Object.entries(DIAS_SEMANA)) {
+      // Patrones: "martes", "el martes", "este martes", "próximo martes", "proximo martes"
+      const diaPattern = new RegExp(`(?:el\\s+|este\\s+|pr[oó]ximo\\s+)?${dia}`, 'i');
+      if (diaPattern.test(lowerStr)) {
+        resultDate = getNextDayOfWeek(index);
+        break;
+      }
+    }
+  }
+
+  // 3. Expresiones como "en X días", "dentro de X días"
+  if (!resultDate) {
+    const enDiasMatch = lowerStr.match(/(?:en|dentro de)\s+(\d+)\s*d[ií]as?/i);
+    if (enDiasMatch) {
+      resultDate = addDays(today, parseInt(enDiasMatch[1], 10));
+    }
+  }
+
+  // 4. "la próxima semana"
+  if (!resultDate && /pr[oó]xima\s+semana|siguiente\s+semana/.test(lowerStr)) {
+    resultDate = addWeeks(today, 1);
+  }
+
+  // 5. Intentar parsear como ISO
+  if (!resultDate) {
+    try {
+      const parsed = parseISO(dateStr);
+      if (isValid(parsed)) {
+        resultDate = parsed;
+      }
+    } catch {
+      // Continue
+    }
+  }
+
+  // 6. Intentar parsear como fecha normal
+  if (!resultDate) {
+    const date = new Date(dateStr);
+    if (isValid(date) && date.getFullYear() > 2000) {
+      resultDate = date;
+    }
+  }
+
+  // Si no encontramos fecha pero sí hora, usar hoy
+  if (!resultDate && timeInfo) {
+    resultDate = today;
+  }
+
+  // Aplicar la hora si existe
+  if (resultDate && timeInfo) {
+    resultDate = setHours(resultDate, timeInfo.hours);
+    resultDate = setMinutes(resultDate, timeInfo.minutes);
+  } else if (resultDate) {
+    // Si no hay hora específica, poner una hora por defecto (9:00)
+    const currentHours = resultDate.getHours();
+    if (currentHours === 0 && resultDate.getMinutes() === 0) {
+      resultDate = setHours(resultDate, 9);
+      resultDate = setMinutes(resultDate, 0);
+    }
+  }
+
+  return resultDate;
 }
 
 export async function executeFunction(

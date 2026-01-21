@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { AI_FUNCTIONS, executeFunction } from '@/lib/ai-functions';
 
+// Convertir AI_FUNCTIONS al formato tools
+const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = AI_FUNCTIONS.map(fn => ({
+  type: 'function' as const,
+  function: {
+    name: fn.name,
+    description: fn.description,
+    parameters: fn.parameters,
+  },
+}));
+
 const SYSTEM_PROMPT = `Eres Lucas, el gatito asistente personal de Esther. Eres un adorable gatito muy cariñoso con tu dueña/amiga Esther.
 Hablas siempre en español y tu personalidad es amable, servicial, cariñosa y juguetona.
 
@@ -13,6 +23,12 @@ Tus capacidades principales son:
 - Crear recordatorios con notificaciones
 - Consultar las tareas y recordatorios existentes
 - Marcar tareas como completadas
+
+INSTRUCCIONES IMPORTANTES PARA FECHAS Y HORAS:
+- Cuando el usuario pida algo para un día de la semana (martes, jueves, etc.), usa ese día directamente en fechaHora (ej: "martes a las 9")
+- Si pide varios recordatorios (ej: "martes y jueves"), crea MÚLTIPLES recordatorios llamando a la función varias veces
+- Siempre incluye la hora en el formato "día a las HH:MM" (ej: "jueves a las 14:30")
+- Si no especifica hora, pregunta o usa una hora razonable según el contexto
 
 Cuando Esther te pida crear una tarea o recordatorio, usa las funciones disponibles.
 Cuando te pregunte qué tiene pendiente o para hoy, lista las tareas y recordatorios.
@@ -53,34 +69,45 @@ export async function POST(request: NextRequest) {
         { role: 'system', content: SYSTEM_PROMPT },
         ...messages,
       ],
-      functions: AI_FUNCTIONS,
-      function_call: 'auto',
+      tools: TOOLS,
+      tool_choice: 'auto',
       temperature: 0.7,
       max_tokens: 1000,
     });
 
     const message = response.choices[0].message;
 
-    // Check if the model wants to call a function
-    if (message.function_call) {
-      const functionName = message.function_call.name;
-      const functionArgs = JSON.parse(message.function_call.arguments);
+    // Check if the model wants to call tools (puede ser múltiples)
+    if (message.tool_calls && message.tool_calls.length > 0) {
+      const toolResults: OpenAI.Chat.Completions.ChatCompletionToolMessageParam[] = [];
+      const executedFunctions: string[] = [];
 
-      // Execute the function
-      const functionResult = await executeFunction(functionName, functionArgs);
+      // Ejecutar TODAS las tool calls
+      for (const toolCall of message.tool_calls) {
+        if (toolCall.type !== 'function') continue;
 
-      // Get the final response from the model
+        const functionName = toolCall.function.name;
+        const functionArgs = JSON.parse(toolCall.function.arguments);
+
+        // Execute the function
+        const functionResult = await executeFunction(functionName, functionArgs);
+        executedFunctions.push(functionName);
+
+        toolResults.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: functionResult,
+        });
+      }
+
+      // Get the final response from the model with all results
       const secondResponse = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           ...messages,
           message,
-          {
-            role: 'function',
-            name: functionName,
-            content: functionResult,
-          },
+          ...toolResults,
         ],
         temperature: 0.7,
         max_tokens: 500,
@@ -88,7 +115,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         content: secondResponse.choices[0].message.content,
-        functionExecuted: functionName,
+        functionsExecuted: executedFunctions,
       });
     }
 
