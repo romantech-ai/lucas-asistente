@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Trash2, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import Dexie from 'dexie';
 
 export default function ResetPage() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -10,9 +11,9 @@ export default function ResetPage() {
 
   // Check if we just completed a reset
   useEffect(() => {
-    const resetDone = localStorage.getItem('reset_complete');
+    const resetDone = sessionStorage.getItem('reset_complete');
     if (resetDone) {
-      localStorage.removeItem('reset_complete');
+      sessionStorage.removeItem('reset_complete');
       setStatus('success');
       setMessage('Todo limpiado correctamente!');
     }
@@ -25,30 +26,30 @@ export default function ResetPage() {
     try {
       // 1. Clear Supabase FIRST
       const response = await fetch('/api/cleanup-empty-chats', { method: 'POST' });
-      const data = await response.json();
+      await response.json();
 
-      setMessage('Limpiando base de datos local...');
+      setMessage('Eliminando base de datos local...');
 
-      // 2. Delete the entire IndexedDB database
-      const databases = await window.indexedDB.databases();
-      for (const dbInfo of databases) {
-        if (dbInfo.name) {
-          window.indexedDB.deleteDatabase(dbInfo.name);
-        }
+      // 2. Delete IndexedDB using Dexie (more reliable)
+      await Dexie.delete('LucasAsistente');
+
+      // 3. Also try the native API as backup
+      try {
+        window.indexedDB.deleteDatabase('LucasAsistente');
+      } catch (e) {
+        // Ignore
       }
 
-      // 3. Clear all localStorage except essential items
+      // 4. Clear storage
       localStorage.clear();
-
-      // 4. Mark reset as complete and reload
-      localStorage.setItem('reset_complete', 'true');
+      sessionStorage.setItem('reset_complete', 'true');
 
       setMessage('Recargando...');
 
-      // 5. Hard reload to clear all React state and caches
+      // 5. Hard reload
       setTimeout(() => {
-        window.location.href = '/reset?t=' + Date.now();
-      }, 500);
+        window.location.replace('/reset');
+      }, 300);
 
     } catch (error) {
       setStatus('error');
