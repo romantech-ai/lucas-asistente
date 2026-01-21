@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
 import LucasAvatar from '@/components/lucas/avatar';
 import type { Mensaje } from '@/types';
@@ -35,7 +36,9 @@ export default function MensajeComponent({ mensaje }: MensajeProps) {
             : 'bg-card border border-border rounded-bl-sm'
         )}
       >
-        <p className="text-sm whitespace-pre-wrap">{mensaje.contenido}</p>
+        <div className="text-sm prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1">
+          <ReactMarkdown>{mensaje.contenido}</ReactMarkdown>
+        </div>
         <p
           className={cn(
             'text-[10px] mt-1',

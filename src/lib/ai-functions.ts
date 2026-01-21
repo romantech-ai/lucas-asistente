@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { crearTarea, buscarTareas, completarTarea } from '@/hooks/use-tareas';
 import { crearRecordatorio } from '@/hooks/use-recordatorios';
+import { supabase, recordatorioToSupabase } from '@/lib/supabase';
 import { format, startOfDay, endOfDay, addDays, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { Tarea, Recordatorio, Prioridad } from '@/types';
@@ -174,12 +175,20 @@ export async function executeFunction(
           return 'No pude entender la fecha y hora. ¿Podrías especificarla de otra manera?';
         }
 
-        await crearRecordatorio({
+        const recordatorioId = await crearRecordatorio({
           titulo: args.titulo as string,
           descripcion: args.descripcion as string | undefined,
           fechaHora,
           notificarAntes: [0, 15],
         });
+
+        // Sincronizar con Supabase
+        if (supabase && recordatorioId) {
+          const recordatorio = await db.recordatorios.get(recordatorioId);
+          if (recordatorio) {
+            await supabase.from('recordatorios').upsert(recordatorioToSupabase(recordatorio));
+          }
+        }
 
         return `He creado el recordatorio "${args.titulo}" para ${format(fechaHora, "EEEE d 'de' MMMM 'a las' HH:mm", { locale: es })}. Te avisaré cuando sea el momento.`;
       }
