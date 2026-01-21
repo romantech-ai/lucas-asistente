@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, BellOff, Palette, Plus, Trash2 } from 'lucide-react';
+import { Bell, BellOff, Palette, Plus, Trash2, Share, PlusSquare, ExternalLink } from 'lucide-react';
 import Header from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,8 @@ import { useCategorias, crearCategoria, eliminarCategoria } from '@/hooks/use-ca
 import {
   requestNotificationPermission,
   getNotificationPermissionStatus,
-  isNotificationSupported,
+  getNotificationSupportDetails,
+  type NotificationSupportDetails,
 } from '@/lib/notifications';
 import { TIEMPOS_NOTIFICACION } from '@/types';
 import ConfirmDialog from '@/components/shared/confirm-dialog';
@@ -31,17 +32,60 @@ const COLORES = [
   '#EC4899', '#6366F1', '#EF4444', '#14B8A6',
 ];
 
+// Componente para guía de instalación de PWA en iOS
+function IOSInstallGuide() {
+  return (
+    <div className="space-y-4 p-4 bg-muted/50 rounded-lg border border-dashed">
+      <p className="text-sm font-medium text-center">
+        Para recibir notificaciones en iOS, instala Lucas en tu pantalla de inicio:
+      </p>
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 p-2 bg-background rounded-md">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <span className="text-sm font-bold text-primary">1</span>
+          </div>
+          <div className="flex items-center gap-2 flex-1">
+            <Share className="w-5 h-5 text-primary" />
+            <span className="text-sm">Toca el icono de <strong>Compartir</strong></span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 p-2 bg-background rounded-md">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <span className="text-sm font-bold text-primary">2</span>
+          </div>
+          <div className="flex items-center gap-2 flex-1">
+            <PlusSquare className="w-5 h-5 text-primary" />
+            <span className="text-sm">Selecciona <strong>&ldquo;Añadir a pantalla de inicio&rdquo;</strong></span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 p-2 bg-background rounded-md">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <span className="text-sm font-bold text-primary">3</span>
+          </div>
+          <div className="flex items-center gap-2 flex-1">
+            <ExternalLink className="w-5 h-5 text-primary" />
+            <span className="text-sm">Abre <strong>Lucas</strong> desde tu pantalla de inicio</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AjustesPage() {
   const ajustes = useAjustes();
   const categorias = useCategorias();
   const [notificationStatus, setNotificationStatus] = useState<string>('default');
+  const [notificationDetails, setNotificationDetails] = useState<NotificationSupportDetails | null>(null);
   const [newCatName, setNewCatName] = useState('');
   const [newCatColor, setNewCatColor] = useState(COLORES[0]);
   const [showNewCatDialog, setShowNewCatDialog] = useState(false);
   const [catToDelete, setCatToDelete] = useState<number | null>(null);
 
   useEffect(() => {
-    if (isNotificationSupported()) {
+    const details = getNotificationSupportDetails();
+    setNotificationDetails(details);
+    if (details.supported) {
       setNotificationStatus(getNotificationPermissionStatus());
     }
   }, []);
@@ -110,12 +154,19 @@ export default function AjustesPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {!isNotificationSupported() ? (
-              <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                <BellOff className="w-5 h-5 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">
-                  Tu navegador no soporta notificaciones push
-                </p>
+            {notificationDetails && !notificationDetails.supported ? (
+              <div className="space-y-4">
+                {/* Mensaje según el motivo */}
+                {notificationDetails.reason === 'ios-not-installed' ? (
+                  <IOSInstallGuide />
+                ) : (
+                  <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+                    <BellOff className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    <p className="text-sm text-muted-foreground">
+                      {notificationDetails.message}
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <>
